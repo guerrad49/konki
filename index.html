@@ -49,6 +49,7 @@ dialog::backdrop{background:#000a}
 const $=s=>document.querySelector(s), K='show-tracker-v1', CATS=['Anime','Drama','Comedy','Sci-Fi & Fantasy','Crime','Reality','Documentary','Other'];
 let S=JSON.parse(localStorage.getItem(K)||'null')||{key:'',shows:[],watched:{}}, view='week', results=[], open=null;
 const save=()=>localStorage.setItem(K,JSON.stringify(S));
+const dn=s=>s.alias||s.name;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/New_York',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'});
 const st=m=>$('#st').textContent=m||'';
@@ -92,13 +93,13 @@ function card(s){const i=info(s),l=i.un[i.un.length-1];let h='';
  if(!i.un.length&&!i.up)h+=`<div class="ln">Caught up</div>`;
  let tg='';if(i.series)tg='<span class="tag fin">Series finale aired</span>';else if(i.done)tg=`<span class="tag ok">Season ${i.L} complete</span>`;
  if(i.up&&isFin(s,i.up))tg+=`<span class="tag ${i.ended?'fin':'ok'}">${i.ended?'Series':'Season'} finale next</span>`;
- return`<div class="card ${i.wait?'wait':''}" data-open="${s.id}">${logo(s)}<div class="m"><b>${esc(s.name)}</b><div class="sub">${esc(s.svc||'Service unknown')}</div>${h}${tg}</div></div>`}
+ return`<div class="card ${i.wait?'wait':''}" data-open="${s.id}">${logo(s)}<div class="m"><b>${esc(dn(s))}</b><div class="sub">${esc(s.svc||'Service unknown')}</div>${h}${tg}</div></div>`}
 
 function weekView(){const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7));const a=+d,b=a+6048e5,now=Date.now(),g={};
  S.shows.forEach(s=>(s.eps||[]).filter(e=>e.t>=a&&e.t<b).forEach(e=>(g[s.cat||'Other']??=[]).push({s,e})));
  const cs=CATS.filter(c=>g[c]);if(!cs.length)return'<p class="sub">Nothing scheduled this week yet. Add shows under My shows.</p>';
  return cs.map(c=>`<h2>${c}</h2>`+g[c].sort((x,y)=>x.e.t-y.e.t).map(({s,e})=>{const k=e.s+'-'+e.e,w=(S.watched[s.id]||[]).includes(k);
-  return`<div class="row ${e.t>now?'wait':''}">${e.t<=now?`<input type="checkbox" data-w="${s.id}|${k}" ${w?'checked':''}>`:'<span style="width:22px"></span>'}${logo(s)}<div class="m"><b>${esc(s.name)}</b><div class="sub">S${e.s}E${e.e} · ${fmt(e.t)}${isFin(s,e)?' · finale':''}</div></div></div>`}).join('')).join('')}
+  return`<div class="row ${e.t>now?'wait':''}">${e.t<=now?`<input type="checkbox" data-w="${s.id}|${k}" ${w?'checked':''}>`:'<span style="width:22px"></span>'}${logo(s)}<div class="m"><b>${esc(dn(s))}</b><div class="sub">S${e.s}E${e.e} · ${fmt(e.t)}${isFin(s,e)?' · finale':''}</div></div></div>`}).join('')).join('')}
 
 function showsView(){let h=`<input type="search" id="q" placeholder="Search for a show to add" enterkeyhint="search"><div>${results.map(r=>`<div class="res" data-add="${r.id}"><img src="${r.image?.medium||''}" alt=""><div><b>${esc(r.name)}</b><div class="sub">${(r.premiered||'').slice(0,4)} · ${esc(r.webChannel?.name||r.network?.name||'No service listed')} · ${esc((r.genres||[]).slice(0,2).join(', '))}</div></div></div>`).join('')}</div>`;
  const g={};S.shows.forEach(s=>(g[s.cat||'Other']??=[]).push(s));
@@ -115,8 +116,8 @@ function render(){$('#ttl').textContent={week:'This week',shows:'My shows',set:'
  if(open&&$('#dlg').open)detail(open)}
 
 function detail(id){open=id;const s=S.shows.find(x=>x.id==id);if(!s)return;const i=info(s),by={};(s.eps||[]).forEach(e=>(by[e.s]??=[]).push(e));
- $('#dlg').innerHTML=`<h2 style="margin:0;color:var(--tx)">${esc(s.name)}</h2><div class="sub">${esc(s.svc||'Service unknown')} · ${esc(s.cat)} · ${esc(s.status||'')}</div>
-<div class="bar"><button id="ma">Mark all aired as watched</button><button id="sv">Change service</button><select id="sc">${CATS.map(c=>`<option ${c===s.cat?'selected':''}>${c}</option>`).join('')}</select><button class="d" id="rm">Remove</button><button id="cl">Close</button></div>
+ $('#dlg').innerHTML=`<h2 style="margin:0;color:var(--tx)">${esc(dn(s))}</h2><div class="sub">${esc(s.svc||'Service unknown')} · ${esc(s.cat)} · ${esc(s.status||'')}</div>
+<div class="bar"><button id="ma">Mark all aired as watched</button><button id="rn">Rename</button><button id="sv">Change service</button><select id="sc">${CATS.map(c=>`<option ${c===s.cat?'selected':''}>${c}</option>`).join('')}</select><button class="d" id="rm">Remove</button><button id="cl">Close</button></div>
 <div style="overflow:auto;max-height:55vh">${Object.keys(by).sort((a,b)=>b-a).map(n=>`<h2>Season ${n}${i.L==n&&i.done?(i.series?' · series finale aired':' · complete'):''}</h2>`+by[n].slice().reverse().map(e=>{const k=e.s+'-'+e.e;
  return`<div class="row ${e.t>Date.now()?'wait':''}"><input type="checkbox" data-w="${s.id}|${k}" ${i.w.has(k)?'checked':''} ${e.t>Date.now()?'disabled':''}><div class="m">E${e.e} ${esc(e.n)}<div class="sub">${fmt(e.t)}${isFin(s,e)?' · finale':''}</div></div></div>`}).join('')).join('')||'<p class="sub">No episode data yet.</p>'}</div>`;
  if(!$('#dlg').open)$('#dlg').showModal()}
@@ -135,6 +136,7 @@ document.addEventListener('click',async e=>{const t=e.target,c=n=>t.closest(n);
  else if(t.id==='cl')$('#dlg').close();
  else if(t.id==='ma'){const s=S.shows.find(x=>x.id==open);S.watched[s.id]=[...new Set([...(S.watched[s.id]||[]),...s.eps.filter(x=>x.t<=Date.now()).map(x=>x.s+'-'+x.e)])];save();render()}
  else if(t.id==='sv'){const s=S.shows.find(x=>x.id==open),n=prompt('Streaming service name (e.g. Crunchyroll, Hulu, Netflix):',s.svc||'');if(n){s.svc=n;s.svcM=true;s.logo=null;save();render()}}
+ else if(t.id==='rn'){const s=S.shows.find(x=>x.id==open),n=prompt('Display name (leave blank to restore the original):',dn(s));if(n!==null){n.trim()&&n.trim()!==s.name?s.alias=n.trim():delete s.alias;save();render()}}
  else if(t.id==='rm'){if(confirm('Remove this show?')){S.shows=S.shows.filter(x=>x.id!=open);delete S.watched[open];save();$('#dlg').close();render()}}});
 
 document.addEventListener('change',async e=>{const t=e.target;
