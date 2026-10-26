@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Konki</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Konki">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#15131f">
+<style>
+:root{--bg:#15131f;--card:#201d2e;--line:#322e45;--tx:#ece9f5;--mut:#9a95b3;--hot:#ffb347;--ok:#6fd6a8;--fin:#ff7a90;font-family:"Avenir Next",Avenir,system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);padding:env(safe-area-inset-top) 0 calc(76px + env(safe-area-inset-bottom))}
+main{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:26px;margin:8px 0 14px;letter-spacing:-.5px}
+h2{font-size:15px;color:var(--mut);font-weight:600;margin:22px 0 8px}
+input,select,button{font:inherit;color:inherit}
+input[type=search],input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--card)}
+button{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
+button.p{background:var(--hot);color:#2a1a00;border-color:var(--hot);font-weight:700}
+button.d{color:var(--fin)}
+.card{display:flex;gap:12px;background:var(--card);border-radius:14px;padding:12px;margin-bottom:8px;border:1px solid var(--line);cursor:pointer}
+.card.wait{opacity:.5;background:repeating-linear-gradient(135deg,var(--card) 0 8px,#1a1828 8px 16px)}
+.logo{width:38px;height:38px;border-radius:9px;flex:none;object-fit:cover;background:var(--line);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--mut)}
+.m{min-width:0;flex:1}.m b{display:block}
+.sub,.ln{font-size:13px;color:var(--mut);margin-top:2px}
+.ln.hot{color:var(--hot)}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;margin:6px 6px 0 0;border:1px solid}
+.tag.ok{color:var(--ok)}.tag.fin{color:var(--fin)}
+.row{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.row.wait{opacity:.5}
+.row input{width:22px;height:22px;accent-color:var(--hot);flex:none}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#100e18;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;border-radius:0;background:none;padding:16px 0;color:var(--mut)}
+nav button.on{color:var(--hot);font-weight:700}
+dialog{width:min(680px,94vw);max-height:88vh;background:var(--bg);color:var(--tx);border:1px solid var(--line);border-radius:16px;padding:16px}
+dialog::backdrop{background:#000a}
+.res{display:flex;gap:10px;padding:8px 0;align-items:center;cursor:pointer}
+.res img{width:40px;height:60px;border-radius:6px;object-fit:cover;background:var(--line)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+#st{font-size:13px;color:var(--mut);min-height:18px}
+</style></head><body>
+<main><h1 id="ttl"></h1><div id="st"></div><div id="v"></div></main>
+<nav><button data-t="week">This week</button><button data-t="shows">My shows</button><button data-t="set">Settings</button></nav>
+<dialog id="dlg"></dialog>
+<script>
+const $=s=>document.querySelector(s), K='show-tracker-v1', CATS=['Anime','Drama','Comedy','Sci-Fi & Fantasy','Crime','Reality','Documentary','Other'];
+let S=JSON.parse(localStorage.getItem(K)||'null')||{key:'',shows:[],watched:{}}, view='week', results=[], open=null;
+const save=()=>localStorage.setItem(K,JSON.stringify(S));
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/New_York',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+const tm=async(p,q={})=>{const u=new URL('https://api.themoviedb.org/3'+p);u.searchParams.set('api_key',S.key);for(const k in q)u.searchParams.set(k,q[k]);const r=await fetch(u);if(!r.ok)throw Error('TMDB error '+r.status+(r.status==401?' (check your API key)':''));return r.json()};
+const st=m=>$('#st').textContent=m||'';
+
+function guessCat(d){const g=(d.genres||[]).map(x=>x.name);
+ if(g.includes('Animation')&&(d.origin_country||[]).includes('JP'))return'Anime';
+ return['Reality','Documentary','Comedy','Sci-Fi & Fantasy','Crime','Drama'].find(c=>g.includes(c))||'Other'}
+
+async function refresh(s){
+ const d=await tm('/tv/'+s.id,{append_to_response:'external_ids'});
+ s.name=d.name;s.poster=d.poster_path;s.status=d.status;if(!s.catM)s.cat=guessCat(d);
+ if(!s.svcM){try{const p=(await tm(`/tv/${s.id}/watch/providers`)).results?.US,l=p?.flatrate||[];
+  const x=(s.cat==='Anime'&&l.find(a=>/crunchyroll/i.test(a.provider_name)))||l[0]||(d.networks||[])[0];
+  if(x){s.svc=x.provider_name||x.name;s.logo=x.logo_path}}catch{}}
+ let eps=[];
+ try{const im=d.external_ids?.imdb_id;if(im){const l=await fetch('https://api.tvmaze.com/lookup/shows?imdb='+im);
+  if(l.ok){const m=await l.json(),r=await fetch(`https://api.tvmaze.com/shows/${m.id}/episodes`);
+  eps=(await r.json()).filter(x=>x.season>0&&x.number&&x.airstamp).map(x=>({s:x.season,e:x.number,n:x.name,t:Date.parse(x.airstamp)}))}}}catch{}
+ if(!eps.length)for(const se of d.seasons.filter(x=>x.season_number>0).slice(-2)){
+  const sd=await tm(`/tv/${s.id}/season/${se.season_number}`);
+  for(const x of sd.episodes)if(x.air_date)eps.push({s:x.season_number,e:x.episode_number,n:x.name,t:Date.parse(x.air_date+'T05:00:00Z')})}
+ const n=d.next_episode_to_air;if(n&&n.air_date&&!eps.some(x=>x.s===n.season_number&&x.e===n.episode_number))eps.push({s:n.season_number,e:n.episode_number,n:n.name,t:Date.parse(n.air_date+'T05:00:00Z')});
+ if(s.cat==='Anime'){try{const L=Math.max(...eps.map(x=>x.s),1);
+  const r=await fetch('https://graphql.anilist.co',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'query($q:String){Media(search:$q,type:ANIME,sort:POPULARITY_DESC){nextAiringEpisode{episode airingAt}}}',variables:{q:s.name}})});
+  const a=(await r.json()).data?.Media?.nextAiringEpisode;
+  if(a){const t=a.airingAt*1000,x=eps.find(x=>x.s===L&&x.e===a.episode);x?x.t=t:eps.push({s:L,e:a.episode,n:'',t})}}catch{}}
+ s.eps=eps.sort((a,b)=>a.t-b.t);s.sc=Object.fromEntries(d.seasons.map(x=>[x.season_number,x.episode_count]));s.at=Date.now();save()}
+
+async function refreshAll(){if(!S.key||!S.shows.length)return;let i=0;
+ await Promise.allSettled(S.shows.map(s=>refresh(s).then(()=>st(`Updating ${++i}/${S.shows.length}…`))));
+ st('Updated '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}));render()}
+
+function info(s){const w=new Set(S.watched[s.id]||[]),eps=s.eps||[],now=Date.now(),k=e=>e.s+'-'+e.e;
+ const un=eps.filter(e=>e.t<=now&&!w.has(k(e))),up=eps.find(e=>e.t>now),L=Math.max(0,...eps.map(e=>e.s)),inL=eps.filter(e=>e.s===L);
+ const ended=/Ended|Canceled/.test(s.status||''),done=!!eps.length&&inL.every(e=>e.t<=now)&&(ended||inL.length>=(s.sc?.[L]||99));
+ return{w,un,up,L,done,ended,series:done&&ended,wait:!un.length&&!!up}}
+const isFin=(s,e)=>s.sc?.[e.s]===e.e;
+const logo=s=>s.logo?`<img class="logo" src="https://image.tmdb.org/t/p/w92${s.logo}" alt="${esc(s.svc)}">`:`<div class="logo">${esc((s.svc||'?').slice(0,2))}</div>`;
+
+function card(s){const i=info(s),l=i.un[i.un.length-1];let h='';
+ if(i.un.length)h+=`<div class="ln hot">${i.un.length} unwatched · latest S${l.s}E${l.e}</div>`;
+ if(i.up)h+=`<div class="ln">Next: S${i.up.s}E${i.up.e} · ${fmt(i.up.t)}</div>`;
+ if(!i.un.length&&!i.up)h+=`<div class="ln">Caught up</div>`;
+ let tg='';if(i.series)tg='<span class="tag fin">Series finale aired</span>';else if(i.done)tg=`<span class="tag ok">Season ${i.L} complete</span>`;
+ if(i.up&&isFin(s,i.up))tg+=`<span class="tag ${i.ended?'fin':'ok'}">${i.ended?'Series':'Season'} finale next</span>`;
+ return`<div class="card ${i.wait?'wait':''}" data-open="${s.id}">${logo(s)}<div class="m"><b>${esc(s.name)}</b><div class="sub">${esc(s.svc||'Service unknown')}</div>${h}${tg}</div></div>`}
+
+function weekView(){const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7));const a=+d,b=a+6048e5,now=Date.now(),g={};
+ S.shows.forEach(s=>(s.eps||[]).filter(e=>e.t>=a&&e.t<b).forEach(e=>(g[s.cat||'Other']??=[]).push({s,e})));
+ const cs=CATS.filter(c=>g[c]);if(!cs.length)return'<p class="sub">Nothing scheduled this week yet. Add shows under My shows.</p>';
+ return cs.map(c=>`<h2>${c}</h2>`+g[c].sort((x,y)=>x.e.t-y.e.t).map(({s,e})=>{const k=e.s+'-'+e.e,w=(S.watched[s.id]||[]).includes(k);
+  return`<div class="row ${e.t>now?'wait':''}">${e.t<=now?`<input type="checkbox" data-w="${s.id}|${k}" ${w?'checked':''}>`:'<span style="width:22px"></span>'}${logo(s)}<div class="m"><b>${esc(s.name)}</b><div class="sub">S${e.s}E${e.e} · ${fmt(e.t)}${isFin(s,e)?' · finale':''}</div></div></div>`}).join('')).join('')}
+
+function showsView(){let h=`<input type="search" id="q" placeholder="Search for a show to add" enterkeyhint="search"><div>${results.map(r=>`<div class="res" data-add="${r.id}"><img src="${r.poster_path?'https://image.tmdb.org/t/p/w92'+r.poster_path:''}" alt=""><div><b>${esc(r.name)}</b><div class="sub">${(r.first_air_date||'').slice(0,4)} · ${esc((r.overview||'').slice(0,90))}</div></div></div>`).join('')}</div>`;
+ const g={};S.shows.forEach(s=>(g[s.cat||'Other']??=[]).push(s));
+ CATS.filter(c=>g[c]).forEach(c=>h+=`<h2>${c}</h2>`+g[c].map(card).join(''));
+ if(!S.shows.length)h+='<p class="sub">No shows yet. Search above to add your first one.</p>';return h}
+
+function setView(){return`<h2>TMDB API key</h2><input type="text" id="key" value="${esc(S.key)}" placeholder="Paste your free TMDB key" autocapitalize="off" autocorrect="off"><div class="bar"><button class="p" id="sk">Save key</button><button id="ra">Refresh all shows</button></div>
+<h2>Backup</h2><p class="sub">Your list lives only on this device. Export a backup now and then.</p><div class="bar"><button id="ex">Export backup</button><button id="im">Import backup</button></div><input type="file" id="fi" accept=".json,application/json" hidden>
+<p class="sub">Times are shown in Eastern Time and come from TVmaze and AniList. When a source only has a date, midnight ET is assumed. This product uses the TMDB API but is not endorsed or certified by TMDB.</p>`}
+
+function render(){$('#ttl').textContent={week:'This week',shows:'My shows',set:'Settings'}[view];
+ document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===view));
+ const q=$('#q')?.value;$('#v').innerHTML={week:weekView,shows:showsView,set:setView}[view]();if(q&&$('#q'))$('#q').value=q;
+ if(open&&$('#dlg').open)detail(open)}
+
+function detail(id){open=id;const s=S.shows.find(x=>x.id==id);if(!s)return;const i=info(s),by={};(s.eps||[]).forEach(e=>(by[e.s]??=[]).push(e));
+ $('#dlg').innerHTML=`<h2 style="margin:0;color:var(--tx)">${esc(s.name)}</h2><div class="sub">${esc(s.svc||'Service unknown')} · ${esc(s.cat)} · ${esc(s.status||'')}</div>
+<div class="bar"><button id="ma">Mark all aired as watched</button><button id="sv">Change service</button><select id="sc">${CATS.map(c=>`<option ${c===s.cat?'selected':''}>${c}</option>`).join('')}</select><button class="d" id="rm">Remove</button><button id="cl">Close</button></div>
+<div style="overflow:auto;max-height:55vh">${Object.keys(by).sort((a,b)=>b-a).map(n=>`<h2>Season ${n}${i.L==n&&i.done?(i.series?' · series finale aired':' · complete'):''}</h2>`+by[n].slice().reverse().map(e=>{const k=e.s+'-'+e.e;
+ return`<div class="row ${e.t>Date.now()?'wait':''}"><input type="checkbox" data-w="${s.id}|${k}" ${i.w.has(k)?'checked':''} ${e.t>Date.now()?'disabled':''}><div class="m">E${e.e} ${esc(e.n)}<div class="sub">${fmt(e.t)}${isFin(s,e)?' · finale':''}</div></div></div>`}).join('')).join('')||'<p class="sub">No episode data yet.</p>'}</div>`;
+ if(!$('#dlg').open)$('#dlg').showModal()}
+
+document.addEventListener('click',async e=>{const t=e.target,c=n=>t.closest(n);
+ if(c('nav button')){view=c('nav button').dataset.t;render()}
+ else if(c('[data-open]'))detail(c('[data-open]').dataset.open);
+ else if(c('[data-add]')){const r=results.find(x=>x.id==c('[data-add]').dataset.add);if(S.shows.some(x=>x.id==r.id))return;
+  const s={id:r.id,name:r.name,poster:r.poster_path,cat:'Other'};S.shows.push(s);results=[];save();st('Adding '+r.name+'…');
+  try{await refresh(s);st('Added '+s.name)}catch(x){st(x.message)}render()}
+ else if(t.id==='sk'){S.key=$('#key').value.trim();save();st('Key saved');refreshAll()}
+ else if(t.id==='ra'){refreshAll()}
+ else if(t.id==='ex'){const f=new File([JSON.stringify(S)],`show-tracker-${new Date().toISOString().slice(0,10)}.json`,{type:'application/json'});
+  if(navigator.canShare?.({files:[f]}))try{await navigator.share({files:[f]})}catch{}
+  else{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click()}}
+ else if(t.id==='im')$('#fi').click();
+ else if(t.id==='cl')$('#dlg').close();
+ else if(t.id==='ma'){const s=S.shows.find(x=>x.id==open);S.watched[s.id]=[...new Set([...(S.watched[s.id]||[]),...s.eps.filter(x=>x.t<=Date.now()).map(x=>x.s+'-'+x.e)])];save();render()}
+ else if(t.id==='sv'){const s=S.shows.find(x=>x.id==open),n=prompt('Streaming service name (e.g. Crunchyroll, Hulu, Netflix):',s.svc||'');if(n){s.svc=n;s.svcM=true;s.logo=null;save();render()}}
+ else if(t.id==='rm'){if(confirm('Remove this show?')){S.shows=S.shows.filter(x=>x.id!=open);delete S.watched[open];save();$('#dlg').close();render()}}});
+
+document.addEventListener('change',async e=>{const t=e.target;
+ if(t.dataset.w){const[id,k]=t.dataset.w.split('|'),a=new Set(S.watched[id]||[]);t.checked?a.add(k):a.delete(k);S.watched[id]=[...a];save();render()}
+ else if(t.id==='sc'){const s=S.shows.find(x=>x.id==open);s.cat=t.value;s.catM=true;save();render()}
+ else if(t.id==='fi'){try{const d=JSON.parse(await t.files[0].text());if(!Array.isArray(d.shows))throw 0;S=d;save();st('Backup imported');refreshAll();render()}catch{st('That file is not a valid backup.')}}});
+
+let tmr;document.addEventListener('input',e=>{if(e.target.id!=='q')return;clearTimeout(tmr);const v=e.target.value.trim();
+ if(!S.key){st('Add your TMDB key in Settings first.');return}
+ tmr=setTimeout(async()=>{if(v.length<2){results=[];render();return}try{results=(await tm('/search/tv',{query:v})).results.slice(0,6);st('');render()}catch(x){st(x.message)}},350)});
+
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+if(!S.key)view='set';render();
+if(S.shows.some(s=>!s.at||Date.now()-s.at>36e5*3))refreshAll();
+</script></body></html>
