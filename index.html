@@ -129,9 +129,11 @@ document.addEventListener('click',async e=>{const t=e.target,c=n=>t.closest(n);
   const s={id:r.id,name:r.name,cat:'Other'};S.shows.push(s);results=[];save();st('Adding '+r.name+'…');
   try{await refresh(s);st('Added '+s.name)}catch(x){st(x.message)}render()}
  else if(t.id==='ra'){refreshAll()}
- else if(t.id==='ex'){const f=new File([JSON.stringify(S)],`show-tracker-${new Date().toISOString().slice(0,10)}.json`,{type:'application/json'});
-  if(navigator.canShare?.({files:[f]}))try{await navigator.share({files:[f]})}catch{}
-  else{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click()}}
+ else if(t.id==='ex'){const f=new File([JSON.stringify(S,null,1)],`konki-backup-${new Date().toISOString().slice(0,10)}.json`,{type:'application/json'}),
+   touch=/iPhone|iPad/.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Mac/.test(navigator.userAgent));
+  try{if(touch&&navigator.canShare?.({files:[f]})){await navigator.share({files:[f]});st('Backup ready to save');return}}catch(x){if(x.name==='AbortError')return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5e3);st('Backup downloaded: '+f.name)}
  else if(t.id==='im')$('#fi').click();
  else if(t.id==='cl')$('#dlg').close();
  else if(t.id==='ma'){const s=S.shows.find(x=>x.id==open);S.watched[s.id]=[...new Set([...(S.watched[s.id]||[]),...s.eps.filter(x=>x.t<=Date.now()).map(x=>x.s+'-'+x.e)])];save();render()}
